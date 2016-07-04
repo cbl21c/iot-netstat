@@ -91,8 +91,12 @@ def getMACaddress(ifname):
         return None
 
     # mac address starts 6 chars from the start of 'ether'
+    # or 7 chars from the start of 'HWaddr' (Debian)
     # and is 17 chars in length
-    macStart = output.find('ether') + 6
+    if output.find('ether') > 0:
+        macStart = output.find('ether') + 6
+    else:
+        macStart = output.find('HWaddr') + 7
     macEnd = macStart + 17
     macAddress = string.replace(output[macStart:macEnd], ':', '')
 
@@ -147,12 +151,13 @@ options = {
     'auth-token': None
 }
 
-
 #
 # initialise the device client
 #
 try:
+    # connect to IOTF
     dev = ibmiotf.device.Client(options)
+    dev.connect()
 except ibmiotf.ConnectionException as e:
     print("Caught exception connecting device: %s" % str(e))
     sys.exit(-1)
@@ -167,9 +172,6 @@ if prev_ipkts == None or prev_opkts == None:
     print("Could not get stats for %s" % args.ifname)
     sys.exit(-1)
 
-
-# connect to IOTF
-dev.connect()
 
 #
 # runloop
@@ -187,22 +189,28 @@ while True:
         delta_ipkts = ipkts - prev_ipkts
         delta_opkts = opkts - prev_opkts
 
-        data = { 'd': {'ipkts': delta_ipkts, 'opkts': delta_opkts } }
+        # timestamp in format YYYY-mm-DDTHH:MM:SSZ (use GMT)
+        # example 2016-06-30T11:21:14Z
+        ts = time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime())
+
+        data = {
+            'd': {
+                'ipkts': delta_ipkts,
+                 'opkts': delta_opkts
+            },
+            'ts': ts
+        }
+
         prev_ipkts = ipkts
         prev_opkts = opkts
 
-        # JSON object for our ethernet stats:
-        # {
-        #   "d": {
-        #     "ipkts": %d,
-        #     "opkts": %d
-        #   }
-        # }
-
         if args.debug:
             sys.stdout.write('{\n')
-            sys.stdout.write('  "ipkts": ' + str(data['d']['ipkts']) + ',\n')
-            sys.stdout.write('  "opkts": ' + str(data['d']['opkts']) + '\n')
+            sys.stdout.write('  "d": {\n')
+            sys.stdout.write('    "ipkts": ' + str(data['d']['ipkts']) + ',\n')
+            sys.stdout.write('    "opkts": ' + str(data['d']['opkts']) + '\n')
+            sys.stdout.write('  },\n')
+            sys.stdout.write('  "ts": ' + ts + '\n')
             sys.stdout.write('}\n')
 
         success = dev.publishEvent("ethernet", "json", data)
