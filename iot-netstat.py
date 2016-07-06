@@ -151,6 +151,13 @@ options = {
     'auth-token': None
 }
 
+# override quickstart
+options['org'] = 'nqi5cl'
+options['type'] = 'MacBook'
+options['auth-method'] = 'token'
+options['auth-token'] = 'a8032e78b6df662f'
+
+
 #
 # initialise the device client
 #
