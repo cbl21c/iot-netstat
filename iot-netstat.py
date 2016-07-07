@@ -79,16 +79,19 @@ def getPacketCount(osname, ifname):
 #                                              #
 ################################################
 
-def getMACaddress(ifname):
+def getAddresses(ifname):
+    macAddress = None
+    ipAddress  = None
+
     cmd = ['/sbin/ifconfig', ifname]
     try:
         output = subprocess.check_output(cmd).decode('utf-8')
     except subprocess.CalledProcessError as e:
-        return None
+        return (macAddress, ipAddress)
 
     # valid interface, but we also need to check that it is not loopback
     if output.find('LOOPBACK') > 0:
-        return None
+        return (macAddress, ipAddress)
 
     # mac address starts 6 chars from the start of 'ether'
     # or 7 chars from the start of 'HWaddr' (Debian)
@@ -100,7 +103,17 @@ def getMACaddress(ifname):
     macEnd = macStart + 17
     macAddress = string.replace(output[macStart:macEnd], ':', '')
 
-    return macAddress
+    # ip address starts 5 chars from the start of 'inet '
+    if output.find('inet addr:') > 0:
+        ipStart = output.find('inet addr:') + 10
+        ipEnd   = output.find('  Bcast')
+    else:
+        ipStart = output.find('inet ') + 5
+        ipEnd   = output.find(' netmask')
+
+    ipAddress = output[ipStart:ipEnd]
+
+    return (macAddress, ipAddress)
 
 
 ################################
@@ -136,7 +149,7 @@ if args.wait:
 osname = os.uname()[0]
 
 # mac address will form the client id
-clientId = getMACaddress(args.ifname)
+(clientId, ipAddress) = getAddresses(args.ifname)
 if clientId == None:
     print("Invalid interface %s" % args.ifname)
     sys.exit(-1)
@@ -196,7 +209,8 @@ while True:
         data = {
             'd': {
                 'ipkts': delta_ipkts,
-                 'opkts': delta_opkts
+                 'opkts': delta_opkts,
+                 'ip': ipAddress
             },
             'ts': ts
         }
@@ -208,7 +222,8 @@ while True:
             sys.stdout.write('{\n')
             sys.stdout.write('  "d": {\n')
             sys.stdout.write('    "ipkts": ' + str(data['d']['ipkts']) + ',\n')
-            sys.stdout.write('    "opkts": ' + str(data['d']['opkts']) + '\n')
+            sys.stdout.write('    "opkts": ' + str(data['d']['opkts']) + ',\n')
+            sys.stdout.write('    "ip": "' + str(data['d']['ip']) + '"\n')
             sys.stdout.write('  },\n')
             sys.stdout.write('  "ts": ' + ts + '\n')
             sys.stdout.write('}\n')
